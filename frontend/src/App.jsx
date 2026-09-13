@@ -1,0 +1,124 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import LoginPage from './components/LoginPage.jsx';
+import TopicSelection from './components/TopicSelection.jsx';
+import ExamInterface from './components/ExamInterface.jsx';
+import ResultScreen from './components/ResultScreen.jsx';
+import AdminDashboard from './components/AdminDashboard.jsx';
+import StudentDashboard from './components/StudentDashboard.jsx';
+
+function App() {
+  const [user, setUser] = useState(null);
+  const [page, setPage] = useState('login');
+  const [selectedTopic, setSelectedTopic] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  // ── Sync state with URL Hash for Browser Back Button ────────────────
+  const syncPageFromHash = useCallback(() => {
+    const hash = window.location.hash.replace('#', '');
+    const savedUser = localStorage.getItem('exam_auth_user');
+    
+    if (!savedUser) {
+      setPage('login');
+      return;
+    }
+
+    const userData = JSON.parse(savedUser);
+    setUser(userData);
+
+    if (hash.startsWith('exam/')) {
+      const topic = hash.split('/')[1];
+      setSelectedTopic(topic);
+      setPage('exam');
+    } else if (userData.role === 'ADMIN') {
+      // Admin is strictly restricted to the admin dashboard
+      setPage('admin');
+      if (hash !== 'admin') window.location.hash = 'admin';
+    } else if (hash === 'results') {
+      setPage('results');
+    } else if (hash === 'topics') {
+      setPage('topics');
+    } else {
+      setPage('topics');
+      window.location.hash = 'topics';
+    }
+  }, []);
+
+  useEffect(() => {
+    syncPageFromHash();
+    setLoading(false);
+    window.addEventListener('popstate', syncPageFromHash);
+    return () => window.removeEventListener('popstate', syncPageFromHash);
+  }, [syncPageFromHash]);
+
+  const navigate = (newPage, topic = null) => {
+    let hash = newPage;
+    if (topic) hash = `exam/${topic}`;
+    window.location.hash = hash;
+    setPage(newPage);
+    if (topic) setSelectedTopic(topic);
+  };
+
+  const handleLogin = (userData) => {
+    setUser(userData);
+    localStorage.setItem('exam_auth_user', JSON.stringify(userData));
+    navigate(userData.role === 'ADMIN' ? 'admin' : 'topics');
+  };
+
+  const handleTopicSelect = (topic) => {
+    navigate('exam', topic);
+  };
+
+  const handleExamComplete = () => {
+    navigate('results');
+  };
+
+  const handleExitExam = () => {
+    if (window.confirm("Are you sure you want to exit? Your current exam progress will be lost.")) {
+      navigate(user.role === 'ADMIN' ? 'admin' : 'topics');
+    }
+  };
+
+  const handleLogout = () => {
+    // Record logout time in session logs
+    const activeSessionId = localStorage.getItem('active_session_id');
+    if (activeSessionId) {
+      const logs = JSON.parse(localStorage.getItem('session_logs') || '[]');
+      const logIndex = logs.findIndex(l => String(l.id) === String(activeSessionId));
+      if (logIndex >= 0) {
+        logs[logIndex].logoutTime = new Date().toISOString();
+        localStorage.setItem('session_logs', JSON.stringify(logs));
+      }
+      localStorage.removeItem('active_session_id');
+    }
+
+    setUser(null);
+    localStorage.removeItem('exam_auth_user');
+    window.location.hash = 'login';
+    setPage('login');
+    setSelectedTopic(null);
+    // Ensure active test flag is cleared on logout
+    localStorage.removeItem('active_exam_user_' + user?.id);
+  };
+
+  if (loading) {
+    return <div style={{ height: '100vh', background: '#0f172a' }} />;
+  }
+
+  return (
+    <div>
+      {page === 'login' && <LoginPage onLogin={handleLogin} />}
+      {page === 'topics' && user.role !== 'ADMIN' && (
+        <StudentDashboard 
+          user={user} 
+          onSelect={handleTopicSelect} 
+          onLogout={handleLogout} 
+        />
+      )}
+      {page === 'exam' && <ExamInterface user={user} topic={selectedTopic} onComplete={handleExamComplete} onExit={() => navigate(user.role === 'ADMIN' ? 'admin' : 'topics')} />}
+      {page === 'results' && <ResultScreen user={user} onBack={() => navigate(user.role === 'ADMIN' ? 'admin' : 'topics')} onLogout={handleLogout} />}
+      {page === 'admin' && user.role === 'ADMIN' && <AdminDashboard user={user} onLogout={handleLogout} />}
+    </div>
+  );
+}
+
+export default App;
