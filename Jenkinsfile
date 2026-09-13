@@ -46,9 +46,9 @@ pipeline {
                 dir('backend') {
                     script {
                         if (isUnix()) {
-                            sh 'mvn clean package -DskipTests'
+                            sh 'if [ -f mvnw ]; then chmod +x mvnw && ./mvnw clean package -DskipTests; else mvn clean package -DskipTests; fi'
                         } else {
-                            bat 'mvn clean package -DskipTests'
+                            bat 'call mvnw.cmd clean package -DskipTests'
                         }
                     }
                 }
@@ -63,9 +63,9 @@ pipeline {
                 dir('backend') {
                     script {
                         if (isUnix()) {
-                            sh 'mvn test'
+                            sh 'if [ -f mvnw ]; then ./mvnw test; else mvn test; fi'
                         } else {
-                            bat 'mvn test'
+                            bat 'call mvnw.cmd test'
                         }
                     }
                 }
